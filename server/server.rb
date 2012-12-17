@@ -17,7 +17,8 @@ class Server
     def initialize(fname)
       @mutex = Mutex.new
       @filename = fname
-      @currentFiles = mapDirectory(@filename)
+      #@currentFiles = mapDirectory(@filename)
+      @currentFiles = list_dir("/Users/david/Documents/ruby/filesystem/server/", @filename)
       socket = TCPSocket.open(DIRECTORY_HOST, DIRECTORY_PORT)
       json_str = {"type" => "initServer", "uri" => SERVER_URI, "files" => @currentFiles}.to_json
       socket.puts json_str
@@ -26,6 +27,7 @@ class Server
     
     def downloadFile(file)
       fileContent = nil
+      puts file
       @mutex.synchronize do
         f = open(file, "rb")
         fileContent = f.read
@@ -37,7 +39,7 @@ class Server
     
     def uploadFile(dest, fileData)
       @mutex.synchronize do
-        destFile = File.open(dest, "wb")
+        destFile = File.open(dest, "a+")
         destFile.print fileData
         if !@currentFiles.include? dest
           updateDirectory(dest)
@@ -48,31 +50,35 @@ class Server
     end
     
     def updateDirectory(file)
-      @currentFiles.push(file)
-      directory_service = DRbObject.new_with_uri(DIRECTORY_URI)
-      directory_service.update(SERVER_URI, file)
+      ext = File.extname(file)
+      newFile = {:file_ext => "#{ext[1..ext.length-1]}", :abs_file => "/" + file, :rel_file => File.basename(file) }
+      @currentFiles.push(newFile)
+      #directory_service = DRbObject.new_with_uri(DIRECTORY_URI)
+      #directory_service.update(SERVER_URI, file)
       
       socket = TCPSocket.open(DIRECTORY_HOST, DIRECTORY_PORT)
-      json_str = {"type" => "update", "uri" => SERVER_URI, "file" => file}.to_json
+      json_str = {"type" => "update", "uri" => SERVER_URI, "file" => newFile}.to_json
       socket.puts json_str
       socket.close
     end
-    
-    def mapDirectory(dir)
-      files = getDirFiles(dir)
-      folders = Pathname.new(dir).children.select {|c| c.directory? }
-      if !folders.empty?
-        folders.each do |folder|
-          files = files + mapDirectory(folder.cleanpath)
+
+    def list_dir(root, path, show_hidden = false)
+      results = []
+      Dir.foreach("#{root + path}") do |x|
+        full_path = root + path + '/' + x
+        unless x == '.' || x == '..'
+          unless !show_hidden && x[0] == '.'
+            if File.directory?(full_path)
+              results << { :file_ext => "folder", :abs_dir =>  "#{path}#{x}/", :rel_dir => "#{x}" }
+            else
+              ext = File.extname(full_path)
+              results << { :file_ext => "#{ext[1..ext.length-1]}", :abs_file => "#{path}#{x}", :rel_file => "#{x}" }
+            end
+          end
         end
       end
-      return files
+      return results
     end
-    
-    def getDirFiles(dir)
-      return Dir.glob(dir+"*.*")
-    end
-
 end
 
 config = Hash.new
@@ -91,7 +97,7 @@ if require_client_cert then
   end
 end
 
-server_object=Server.new("files/")
+server_object=Server.new("/files/")
 
 $SAFE = 0   # disable eval() and friends
 

@@ -6,6 +6,14 @@
 	
 </div>
 
-<form action="/form" method="post"> 
-	<input type="submit">  
+<form action="/download" method="post" enctype="multipart/formdata">
+	<input type="text" name="downloadFile" id="dlField" readonly>
+	<input type="submit" value="Download">
 </form>
+
+<div class="upload-section">
+	<form action="/upload" method="post" enctype="multipart/form-data">
+		<input type="file" name="uploadedFile">
+		<input type="submit" value="Upload">
+	</form>
+</div>

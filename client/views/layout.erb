@@ -13,11 +13,21 @@
 		<link rel="stylesheet" href="/jqueryFileTree.css">
 		<script type="text/javascript">
 			$(document).ready( function() {
+				var fileSel = "";
+				
 			    $('#filesystem').fileTree({
 			        root: '/client',
 			        script: 'jqueryfiletree/content'
 			    }, function(file) {
-			        alert(file);
+			        //alert(file);
+					/*$.ajax({
+						type: "POST",
+						url: "/download",
+						data: {filePath: file}
+					});*/
+					fileSel = file;
+					$('#dlField').val(file);
+					$(file).addClass('gay');
 			    });
 			});
 		</script>

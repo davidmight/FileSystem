@@ -1,21 +1,22 @@
  <ul class="jqueryFileTree" style="display: none;">
     <%   @results.each do | res | %>
-    <%     if res.has_key? :abs_dir   %>
+    <%     if res["file_ext"] == "folder"   %>
             <li class="directory collapsed">
-              <a href="#" rel="<%=res[:abs_dir]%>"><%= res[:rel_dir] %></a>
+              <a href="#" rel="<%=res['abs_dir']%>"><%= res['rel_dir'] %></a>
             </li>
         <% else %>
             <li class="file ext_<%=res[:file_ext]%>">
-              <a href="#" rel="<%=res[:abs_file]%>"><%=res[:rel_file]%></a>
+              <a href="#" rel="<%=res['abs_file']%>"><%=res['rel_file']%></a>
             </li>
         <%  end %>
     <% end %>
 </ul>
 
-<ul class="jqueryFileTree" style="display: none;">
-    <%   @results.each do | res | %>
-            <li class="file ext_<%=res%>">
-              <a href="#" rel="<%=res%>"><%=res%></a>
-            </li>
-    <% end %>
-</ul>
+<script type="text/javascript">
+	$(document).ready( function() {
+		$('#filesystem').on('click', 'li a', function(){
+			$('.fileSelected').removeClass('fileSelected');
+			$(this).addClass('fileSelected');
+		});
+	});
+</script>

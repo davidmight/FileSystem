@@ -20,8 +20,13 @@ DIRECTORY_PORT = 2000
             server_id = db.query("SELECT serverId FROM Servers WHERE uri='#{serverUri}'").fetch_row
             
             files.each do |file|
-              file_insert = db.prepare "INSERT INTO Files (name, serverId) VALUES (?, ?)"
-              file_insert.execute file, server_id[0]
+              puts file
+              file_insert = db.prepare "INSERT INTO Files (type, absPath, relPath, serverId) VALUES (?, ?, ?, ?)"
+              if file["file_ext"] == "folder"
+                file_insert.execute file["file_ext"], file["abs_dir"], file["rel_dir"], server_id[0]
+              else
+                file_insert.execute file["file_ext"], file["abs_file"], file["rel_file"], server_id[0]
+              end
             end
             
           else
@@ -42,7 +47,33 @@ DIRECTORY_PORT = 2000
     end
     
     def updateFile(file)
-        return searchForFile(file)
+        capableServers = searchForFile(file)
+        if !capableServers.empty?
+          return capableServers[0]
+        else
+          puts "no capable servers"
+        end
+    end
+    
+    def getUploadServer
+      begin
+        
+        db = Mysql.connect("localhost", "root", "", "distributed")
+        
+        server_uri = db.query("SELECT * FROM Servers")
+        row = server_uri.fetch_row
+        uploadServer = row[1]
+        
+      rescue Mysql::Error => e
+        puts "Oh noes! We could not connect to our database."
+        puts e
+        exit 1
+        
+      ensure
+        db.close
+      end
+      
+      return uploadServer
     end
     
     def getFileList
@@ -51,7 +82,13 @@ DIRECTORY_PORT = 2000
         db = Mysql.connect("localhost", "root", "", "distributed")
         files = db.query("SELECT * FROM Files")
         while row = files.fetch_row do
-          fileList.push(row[1])
+          if row[1] == "folder"
+            newFile = {"file_ext" => row[1], "abs_dir" => row[2], "rel_dir" => row[3]}.to_json
+          else
+            newFile = {"file_ext" => row[1], "abs_file" => row[2], "rel_file" => row[3]}.to_json
+          end
+          #puts newFile
+          fileList.push(newFile)
         end
         return fileList
         
@@ -68,13 +105,12 @@ DIRECTORY_PORT = 2000
     
     def searchForFile(file)
         capableServers = []
-        
         begin
           db = Mysql.connect("localhost", "root", "", "distributed")
-          file_location = db.query("SELECT * FROM Files WHERE name='#{file}'")
+          file_location = db.query("SELECT * FROM Files WHERE absPath='#{file}'")
           
           while row = file_location.fetch_row do
-            server_uri = db.query("SELECT uri FROM Servers WHERE serverId='#{row[2]}'").fetch_row
+            server_uri = db.query("SELECT uri FROM Servers WHERE serverId='#{row[4]}'").fetch_row
             capableServers.push(server_uri[0])
           end
           
@@ -97,8 +133,8 @@ DIRECTORY_PORT = 2000
       begin
         db = Mysql.connect("localhost", "root", "", "distributed")
         server_id = db.query("SELECT serverId FROM Servers WHERE uri='#{serverUri}'").fetch_row
-        file_insert = db.prepare "INSERT INTO Files (name, serverId) VALUES (?, ?)"
-        file_insert.execute file, server_id[0]
+        file_insert = db.prepare "INSERT INTO Files (type, absPath, relPath, serverId) VALUES (?, ?, ?, ?)"
+        file_insert.execute file["file_ext"], file["abs_file"], file["rel_file"], server_id[0]
         
       rescue Mysql::Error => e
         puts "Oh noes! We could not connect to our database."
@@ -113,7 +149,6 @@ DIRECTORY_PORT = 2000
 server = TCPServer.open(DIRECTORY_HOST, DIRECTORY_PORT)   # Socket to listen on port 2000
 loop {                          # Servers run forever
   Thread.start(server.accept) do |client|
-    
     request = client.gets
     parsed = JSON.parse(request)
     
@@ -133,6 +168,10 @@ loop {                          # Servers run forever
     when "update"
       update(parsed["uri"], parsed["file"])
       puts "file updated"
+      
+    when "getServer"
+      client.puts getUploadServer
+      puts "gave server list"
       
     else
       puts "invalid request"
