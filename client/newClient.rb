@@ -7,6 +7,44 @@ require 'json'
 require 'haml'
 require 'pathname'
 
+class LRUCache
+  
+  def initialize(size = 10)
+    @size = size
+    @store = {}
+    @lru = []
+  end
+  
+  def set(key, value = nil)
+    value = yield if block_given?
+    @store[key] = value
+    set_lru(key)
+    @store.delete(@lru.pop) if @lru.size > @size
+    value
+  end
+  
+  def get(key)
+    set_lru(key)
+    if !@store.key?(key) && block_given?
+      set(key, yield)
+    else
+      @store[key]
+    end
+  end
+  
+  def delete(key)
+    @store.delete(key)
+    @lru.delete(key)
+  end
+  
+  private
+    def set_lru(key)
+      @lru.unshift(@lru.delete(key) || key)
+    end
+end
+
+cache = LRUCache.new(4)
+
 send_cert=true
 # The URI to connect to
 DIRECTORY_HOST = 'localhost'
@@ -15,21 +53,45 @@ DIRECTORY_PORT = 2000
 LOCKING_HOST = 'localhost'
 LOCKING_PORT = 2001
 
-load 'dir_list.rb'
-
 enable :sessions
 
 def download(server, path, dest_path)
+  socket = TCPSocket.open(LOCKING_HOST, LOCKING_PORT)
+  json_str = {"type" => "gainLock", "file" => "/" + path}.to_json
+  socket.puts json_str
+  
   file_data = server.downloadFile(path)
   dest_file = File.open(dest_path, "a+")
   dest_file.print file_data
   dest_file.close
+  
+  json_str = {"type" => "releaseLock", "file" => "/" + path}.to_json
+  socket.puts json_str
+  socket.close
 end
 
 def upload(server, path, content)
-  #src_file = open(src_path, "rb")
-  #fileContent = src_file.read
-  server.uploadFile(path, content)  
+  socket = TCPSocket.open(LOCKING_HOST, LOCKING_PORT)
+  json_str = {"type" => "gainLock", "file" => "/" + path}.to_json
+  socket.puts json_str
+  
+  server.uploadFile(path, content)
+  
+  json_str = {"type" => "releaseLock", "file" => "/" + path}.to_json
+  socket.puts json_str
+  socket.close
+end
+
+def delete(server, path)
+  socket = TCPSocket.open(LOCKING_HOST, LOCKING_PORT)
+  json_str = {"type" => "gainLock", "file" => "/" + path}.to_json
+  socket.puts json_str
+  
+  server.deleteFile(path)
+  
+  json_str = {"type" => "releaseLock", "file" => "/" + path}.to_json
+  socket.puts json_str
+  socket.close
 end
 
 def getFileList
@@ -50,7 +112,7 @@ end
 def queryFile(file)
   puts "GETTING SERVER"
   socket = TCPSocket.open(DIRECTORY_HOST, DIRECTORY_PORT)
-  json_str = {"type" => "updateFile", "file" => file}.to_json
+  json_str = {"type" => "findFile", "file" => file}.to_json
   puts "FILE: #{json_str}"
   socket.puts json_str
   server = socket.gets
@@ -92,13 +154,25 @@ get '/' do
 end
 
 post '/download' do
-  #puts "File: #{params['downloadFile']}"
   download_file = params['downloadFile']
   server = queryFile(download_file)
   if !server.empty?
     server_service = DRbObject.new_with_uri(server)
     download_file[0] = ''
     download(server_service, download_file, File.expand_path(".") + "/downloads/" + File.basename(download_file))
+  else
+    puts "No server, yo"
+  end
+  redirect "/"
+end
+
+post '/delete' do
+  delete_file = params['deleteFile']
+  server = queryFile(delete_file)
+  if !server.empty?
+    server_service = DRbObject.new_with_uri(server)
+    delete_file[0] = ''
+    delete(server_service, delete_file)
   else
     puts "No server, yo"
   end

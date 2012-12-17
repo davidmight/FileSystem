@@ -6,6 +6,8 @@ require 'socket'
 DIRECTORY_HOST = 'localhost'
 DIRECTORY_PORT = 2000
 
+LOCKING_HOST = 'localhost'
+LOCKING_PORT = 2001
     
     def initialiseServer(serverUri, files)
         begin 
@@ -46,7 +48,7 @@ DIRECTORY_PORT = 2000
         end
     end
     
-    def updateFile(file)
+    def findFile(file)
         capableServers = searchForFile(file)
         if !capableServers.empty?
           return capableServers[0]
@@ -144,6 +146,29 @@ DIRECTORY_PORT = 2000
       ensure
         db.close
       end
+      
+      #socket = TCPSocket.open(LOCKING_HOST, LOCKING_PORT)
+      #json_str = {"type" => "fileUpdate", "file" => file["abs_file"]}.to_json
+      #socket.puts json_str
+      #socket.close
+    end
+    
+    def deleteFile(serverUri, file)
+      puts file
+      begin
+        db = Mysql.connect("localhost", "root", "", "distributed")
+        file_delete = db.prepare "DELETE FROM Files WHERE absPath=?"
+        file_delete.execute file
+        
+      rescue Mysql::Error => e
+        puts "Oh noes! We could not connect to our database."
+        puts e
+        exit 1
+        
+      ensure
+        db.close
+      end
+      
     end
 
 server = TCPServer.open(DIRECTORY_HOST, DIRECTORY_PORT)   # Socket to listen on port 2000
@@ -157,9 +182,9 @@ loop {                          # Servers run forever
       initialiseServer(parsed["uri"], parsed["files"])
       puts "server initialised"
       
-    when "updateFile"
-      client.puts updateFile(parsed["file"])
-      puts "file updated"
+    when "findFile"
+      client.puts findFile(parsed["file"])
+      puts "server passed"
       
     when "getFileList"
       client.puts getFileList
@@ -169,10 +194,18 @@ loop {                          # Servers run forever
       update(parsed["uri"], parsed["file"])
       puts "file updated"
       
+    when "findFileServers"
+      client.puts searchForFile(parsed["file"])
+      puts "servers passed"
+      
     when "getServer"
       client.puts getUploadServer
       puts "gave server list"
       
+    when "deletion"
+      deleteFile(parsed["uri"], parsed["file"])
+      puts "file deleted"
+    
     else
       puts "invalid request"
     end

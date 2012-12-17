@@ -49,6 +49,20 @@ class Server
       puts "UPLOAD"
     end
     
+    def deleteFile(path)
+      File.delete(File.expand_path(".") + "/" + path)
+      @currentFiles.each do |file|
+        if file["abs_file"] == path
+          @currentFiles.delete(file)
+        end
+      end
+      socket = TCPSocket.open(DIRECTORY_HOST, DIRECTORY_PORT)
+      json_str = {"type" => "deletion", "uri" => SERVER_URI, "file" => "/" + path}.to_json
+      socket.puts json_str
+      socket.close
+      puts "DELETION"
+    end
+    
     def updateDirectory(file)
       ext = File.extname(file)
       newFile = {:file_ext => "#{ext[1..ext.length-1]}", :abs_file => "/" + file, :rel_file => File.basename(file) }
